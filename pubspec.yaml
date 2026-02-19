@@ -31,7 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   maplibre_gl: ^0.25.0
-  webview_flutter: ^4.4.2
+  geolocator: ^10.1.0
   http: ^1.2.0
 
   # The following adds the Cupertino Icons font to your application.
@@ -61,7 +61,8 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
+  assets:
+    - styles/map_style.json
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

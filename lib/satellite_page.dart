@@ -1,8 +1,36 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
+
+Future<Position> _determinePosition() async {
+  bool serviceEnabled;
+  LocationPermission permission;
+
+  serviceEnabled = await Geolocator.isLocationServiceEnabled();
+  if (!serviceEnabled) {
+    throw Exception('Location services are disabled.');
+  }
+
+  permission = await Geolocator.checkPermission();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied) {
+      throw Exception('Location permission denied.');
+    }
+  }
+
+  if (permission == LocationPermission.deniedForever) {
+    throw Exception('Location permission permanently denied.');
+  }
+
+  return await Geolocator.getCurrentPosition(
+    desiredAccuracy: LocationAccuracy.high,
+  );
+}
 
 class SatellitePage extends StatefulWidget {
   const SatellitePage({Key? key}) : super(key: key);
@@ -19,7 +47,7 @@ class _SatellitePageState extends State<SatellitePage> {
 
   String selectedProduct = "cod";
   List<String> availableTimes = [];
-  int currentFrame = 0;
+  int currentFrame = 100;
 
   bool isPlaying = false;
   Timer? _animationTimer;
@@ -27,16 +55,40 @@ class _SatellitePageState extends State<SatellitePage> {
   bool _layersInitialized = false;
   static const int _bufferCount = 12;
   int _activeIndex = 0;
-
+  Position _userPosition = Position(
+    longitude: -49.0,
+    latitude: -25.0,
+    timestamp: DateTime(2026),
+    accuracy: 10.0,
+    altitude: 900.0,
+    altitudeAccuracy: 25.0,
+    heading: 0.0,
+    headingAccuracy: 1.0,
+    speed: 0.0,
+    speedAccuracy: 1.0,
+  );
   Timer? _debounce;
   final Duration _debounceDuration = const Duration(milliseconds: 50);
 
+  Timer? _refreshTimer;
+
   final List<String> products = ["cod", "acht", "acha"];
+
+  @override
+  void initState() {
+    super.initState();
+
+    _refreshTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _refreshTimes(),
+    );
+  }
 
   @override
   void dispose() {
     _animationTimer?.cancel();
     _debounce?.cancel();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -44,9 +96,12 @@ class _SatellitePageState extends State<SatellitePage> {
   // Map Initialization
   // ============================
 
-  void _onMapCreated(MapLibreMapController controller) {
+  void _onMapCreated(MapLibreMapController controller) async {
     _controller = controller;
-    _initialize();
+    await _initialize();
+    await _updateUserLocation();
+    await Future.delayed(Duration(milliseconds: 1000));
+    await _centerOnUser();
   }
 
   Future<void> _initialize() async {
@@ -79,7 +134,7 @@ class _SatellitePageState extends State<SatellitePage> {
               : 0;
         }
 
-        _activeIndex = 0;
+        _activeIndex = currentFrame;
       });
     }
   }
@@ -100,6 +155,13 @@ class _SatellitePageState extends State<SatellitePage> {
         await _controller!.removeSource("goes-source-$i");
       } catch (_) {}
     }
+
+    try {
+      await _controller!.removeLayer("user_position_layer");
+    } catch (_) {}
+    try {
+      await _controller!.removeSource("user_position_source");
+    } catch (_) {}
 
     // Initialize buffers
     for (int i = 0; i < _bufferCount; i++) {
@@ -123,10 +185,83 @@ class _SatellitePageState extends State<SatellitePage> {
           rasterFadeDuration: 0.0,
         ),
         belowLayerId: "road_service_case",
+        // belowLayerId: "highway_path",
       );
     }
 
+    // await _controller!.setLayerProperties(
+    //   "boundary_country_inner",
+    //   LineLayerProperties(
+    //     lineWidth: 1.5,
+    //     lineColor: "#FFFFFF",
+    //     // visibility: "visible",
+    //   ),
+    // );
+
+    // await _controller!.setLayerProperties(
+    //   "boundary_country_outline",
+    //   LineLayerProperties(
+    //     lineWidth: 1.5,
+    //     lineColor: "#FFFFFF",
+    //     visibility: "visible",
+    //   ),
+    // );
+
+    // await _controller!.addLineLayer(
+    //   "openmaptiles",
+    //   "boundary_country_coastline",
+    //   LineLayerProperties(lineColor: "#FFFFFF", lineWidth: 1.5),
+    //   sourceLayer: "boundary",
+    //   filter: [
+    //     "all",
+    //     ["==", "admin_level", 2],
+    //     ["==", "maritime", 1], // this is the key
+    //   ],
+    //   belowLayerId: "boundary_country_inner",
+    // );
+
+    // Empty initial source
+    await _controller!.addGeoJsonSource("user_position_source", {
+      "type": "FeatureCollection",
+      "features": [],
+    });
+
+    await _controller!.addCircleLayer(
+      "user_position_source",
+      "user_position_layer",
+      CircleLayerProperties(
+        circleRadius: 6,
+        circleColor: "#2196F3",
+        circleStrokeColor: "#FFFFFF",
+        circleStrokeWidth: 2,
+        circleOpacity: 1.0,
+      ),
+    );
+
     _layersInitialized = true;
+  }
+
+  // ============================
+  // Update satellite data timestamps
+  // ============================
+
+  // in case new sat data comes in
+  Future<void> _refreshTimes() async {
+    if (!mounted) return;
+
+    print("refreshing sat times");
+    final oldTimes = List<String>.from(availableTimes);
+
+    await _fetchTimes();
+
+    // If timestamps changed, reinitialize layers
+    if (oldTimes.isNotEmpty &&
+        availableTimes.isNotEmpty &&
+        oldTimes.last != availableTimes.last) {
+      print("timestamps changed!!!!");
+      await _initializeLayers();
+      await _updateUserLocation();
+    }
   }
 
   // ============================
@@ -209,6 +344,8 @@ class _SatellitePageState extends State<SatellitePage> {
 
     await _fetchTimes();
     await _initializeLayers();
+    await _updateUserLocation();
+    // await _centerOnUser();
   }
 
   void _openProductSelector() {
@@ -295,6 +432,40 @@ class _SatellitePageState extends State<SatellitePage> {
     );
   }
 
+  Future<void> _updateUserLocation() async {
+    final userPosition = await _determinePosition();
+
+    setState(() {
+      _userPosition = userPosition;
+    });
+
+    final geoJson = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [_userPosition.longitude, _userPosition.latitude],
+          },
+        },
+      ],
+    };
+
+    await _controller!.setGeoJsonSource("user_position_source", geoJson);
+  }
+
+  Future<void> _centerOnUser() async {
+    await Future.delayed(Duration(milliseconds: 2000));
+    await _controller!.animateCamera(
+      CameraUpdate.newLatLngZoom(
+        LatLng(_userPosition.latitude, _userPosition.longitude),
+        5.5, // zoom level
+      ),
+      duration: Duration(milliseconds: 2000),
+    );
+  }
+
   void _onSliderChanged(double value) {
     final newFrame = value.toInt();
 
@@ -316,65 +487,99 @@ class _SatellitePageState extends State<SatellitePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          MapLibreMap(
-            styleString:
-                "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-            initialCameraPosition: const CameraPosition(
-              target: LatLng(-15.0, -47.0),
-              zoom: 5,
-            ),
-            onMapCreated: _onMapCreated,
-            // onMapIdle: _onMapIdle,
-            rotateGesturesEnabled: false,
-            tiltGesturesEnabled: false,
-            scrollGesturesEnabled: true,
-            zoomGesturesEnabled: true,
-            compassEnabled: false,
+    return Stack(
+      children: [
+        MapLibreMap(
+          // styleString:
+          // "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+          styleString: "styles/map_style.json",
+          initialCameraPosition: const CameraPosition(
+            target: LatLng(-15, -50),
+            zoom: 3,
           ),
+          onMapCreated: _onMapCreated,
+          cameraTargetBounds: CameraTargetBounds(
+            LatLngBounds(
+              southwest: LatLng(-45.0, -90.0),
+              northeast: LatLng(20.0, -20.0),
+            ),
+          ),
+          minMaxZoomPreference: MinMaxZoomPreference(3, 10),
+          attributionButtonMargins: Point(-100, -100),
+          // locationEnginePlatforms: LocationEnginePlatforms(),
+          // myLocationEnabled: true,
+          // myLocationRenderMode: MyLocationRenderMode.gps,
+          // myLocationTrackingMode: MyLocationTrackingMode.trackingGps,
+          // onMapIdle: _onMapIdle,
+          rotateGesturesEnabled: false,
+          tiltGesturesEnabled: false,
+          scrollGesturesEnabled: true,
+          zoomGesturesEnabled: true,
+          compassEnabled: false,
+        ),
 
-          SafeArea(
-            child: Stack(
-              children: [
-                Positioned(top: 10, left: 10, child: _buildTimestampBox()),
-                Positioned(
-                  top: 10,
-                  right: 20,
-                  child: FloatingActionButton(
-                    backgroundColor: Color(0xFF44403B).withValues(alpha: 0.85),
-                    onPressed: _openProductSelector,
-                    child: const Icon(Icons.satellite_alt, color: Colors.white),
-                  ),
+        SafeArea(
+          child: Stack(
+            children: [
+              Positioned(top: 10, left: 10, child: _buildTimestampBox()),
+              Positioned(
+                top: 10,
+                right: 20,
+                child: FloatingActionButton(
+                  backgroundColor: Color(0xFF44403B).withValues(alpha: 0.85),
+                  onPressed: _openProductSelector,
+                  child: const Icon(Icons.satellite_alt, color: Colors.white),
                 ),
+              ),
 
-                Positioned(
-                  left: 10,
-                  right: 10,
-                  bottom: 10,
-                  child: Card(
-                    color: Color(0xFF44403B).withValues(alpha: 0.85),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Player + slider
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: Icon(
-                                  isPlaying ? Icons.pause : Icons.play_arrow,
-                                  color: Colors.white,
-                                ),
-                                onPressed: _togglePlay,
+              Positioned(
+                left: 30,
+                right: 30,
+                bottom: 10,
+                child: Card(
+                  color: Color(0xFF44403B).withValues(alpha: 0.85),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Player + slider
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                isPlaying ? Icons.pause : Icons.play_arrow,
+                                color: Colors.white,
                               ),
-                              if (availableTimes.isNotEmpty)
-                                Expanded(
+                              onPressed: _togglePlay,
+                            ),
+                            if (availableTimes.isNotEmpty)
+                              Expanded(
+                                child: SliderTheme(
+                                  data: SliderTheme.of(context).copyWith(
+                                    trackHeight: 13,
+                                    activeTrackColor: Colors.grey.shade600,
+                                    inactiveTrackColor: Colors.grey.shade300,
+                                    thumbColor: Colors.blue.withValues(
+                                      alpha: 0.0,
+                                    ),
+                                    overlayColor: Colors.blue.withValues(
+                                      alpha: 0.0,
+                                    ),
+                                    thumbShape: HandleThumbShape(),
+                                    thumbSize: const WidgetStatePropertyAll(
+                                      Size(20, 20),
+                                    ),
+                                    // thumbShape: const RoundSliderThumbShape(
+                                    //   enabledThumbRadius: 12,
+                                    // ),
+                                    // overlayShape: const RoundSliderOverlayShape(
+                                    //   overlayRadius: 20,
+                                    // ),
+                                  ),
                                   child: Slider(
                                     min: 0,
                                     max: (availableTimes.length - 1).toDouble(),
@@ -386,18 +591,18 @@ class _SatellitePageState extends State<SatellitePage> {
                                     },
                                   ),
                                 ),
-                            ],
-                          ),
-                        ],
-                      ),
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

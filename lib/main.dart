@@ -10,6 +10,14 @@ class AstroApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(home: SatellitePage());
+    return MaterialApp(
+      home: Scaffold(
+        body: SatellitePage(),
+        bottomNavigationBar: BottomAppBar(
+          color: Colors.grey.shade900.withValues(alpha: 1.0),
+          height: 50.0,
+        ),
+      ),
+    );
   }
 }
