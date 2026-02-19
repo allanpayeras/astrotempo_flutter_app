@@ -185,40 +185,8 @@ class _SatellitePageState extends State<SatellitePage> {
           rasterFadeDuration: 0.0,
         ),
         belowLayerId: "road_service_case",
-        // belowLayerId: "highway_path",
       );
     }
-
-    // await _controller!.setLayerProperties(
-    //   "boundary_country_inner",
-    //   LineLayerProperties(
-    //     lineWidth: 1.5,
-    //     lineColor: "#FFFFFF",
-    //     // visibility: "visible",
-    //   ),
-    // );
-
-    // await _controller!.setLayerProperties(
-    //   "boundary_country_outline",
-    //   LineLayerProperties(
-    //     lineWidth: 1.5,
-    //     lineColor: "#FFFFFF",
-    //     visibility: "visible",
-    //   ),
-    // );
-
-    // await _controller!.addLineLayer(
-    //   "openmaptiles",
-    //   "boundary_country_coastline",
-    //   LineLayerProperties(lineColor: "#FFFFFF", lineWidth: 1.5),
-    //   sourceLayer: "boundary",
-    //   filter: [
-    //     "all",
-    //     ["==", "admin_level", 2],
-    //     ["==", "maritime", 1], // this is the key
-    //   ],
-    //   belowLayerId: "boundary_country_inner",
-    // );
 
     // Empty initial source
     await _controller!.addGeoJsonSource("user_position_source", {
@@ -490,8 +458,6 @@ class _SatellitePageState extends State<SatellitePage> {
     return Stack(
       children: [
         MapLibreMap(
-          // styleString:
-          // "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
           styleString: "styles/map_style.json",
           initialCameraPosition: const CameraPosition(
             target: LatLng(-15, -50),
@@ -506,11 +472,6 @@ class _SatellitePageState extends State<SatellitePage> {
           ),
           minMaxZoomPreference: MinMaxZoomPreference(3, 10),
           attributionButtonMargins: Point(-100, -100),
-          // locationEnginePlatforms: LocationEnginePlatforms(),
-          // myLocationEnabled: true,
-          // myLocationRenderMode: MyLocationRenderMode.gps,
-          // myLocationTrackingMode: MyLocationTrackingMode.trackingGps,
-          // onMapIdle: _onMapIdle,
           rotateGesturesEnabled: false,
           tiltGesturesEnabled: false,
           scrollGesturesEnabled: true,
