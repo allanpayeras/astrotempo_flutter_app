@@ -46,6 +46,11 @@ class _SatellitePageState extends State<SatellitePage> {
   final String baseUrlTiles = "https://sttiles.astrotempo.org";
 
   String selectedProduct = "cod";
+  static const Map<String, String> _productLabels = {
+    "cod": "Cloud optical depth",
+    "acht": "Cloud top temperature",
+    "acha": "Cloud top height",
+  };
   List<String> availableTimes = [];
   int currentFrame = 100;
 
@@ -313,13 +318,12 @@ class _SatellitePageState extends State<SatellitePage> {
     await _fetchTimes();
     await _initializeLayers();
     await _updateUserLocation();
-    // await _centerOnUser();
   }
 
   void _openProductSelector() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.black,
+      backgroundColor: Color(0xFF44403B).withValues(alpha: 0.85),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -341,7 +345,8 @@ class _SatellitePageState extends State<SatellitePage> {
               ...products.map(
                 (product) => ListTile(
                   title: Text(
-                    product.toUpperCase(),
+                    // product.toUpperCase(),
+                    _productLabels[product] ?? product.toUpperCase(),
                     style: const TextStyle(color: Colors.white),
                   ),
                   trailing: selectedProduct == product
