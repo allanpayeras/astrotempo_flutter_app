@@ -66,10 +66,10 @@ class _SatellitePageState extends State<SatellitePage> {
   final String baseUrlTimes = "https://tiles.astrotempo.org";
   final String baseUrlTiles = "https://sttiles.astrotempo.org";
 
-  String selectedProduct = "cod";
+  String selectedProduct = "acht";
   static const Map<String, String> _productLabels = {
-    "cod": "Cloud optical depth",
     "acht": "Cloud top temperature",
+    "cod": "Cloud optical depth",
     "acha": "Cloud top height",
     "none": "No satellite layer",
   };
@@ -119,7 +119,7 @@ class _SatellitePageState extends State<SatellitePage> {
 
   Timer? _refreshTimer;
 
-  final List<String> products = ["cod", "acht", "acha", "none"];
+  final List<String> products = ["acht", "cod", "acha", "none"];
 
   @override
   void initState() {
