@@ -167,19 +167,36 @@ class _ForecastPageState extends State<ForecastPage> {
 
     final now = DateTime.now();
 
-    HourlyForecast closest = hourly.first;
-    Duration bestDiff = now.difference(closest.time).abs();
-
     for (final h in hourly) {
-      final diff = now.difference(h.time).abs();
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        closest = h;
+      if (h.time.year == now.year &&
+          h.time.month == now.month &&
+          h.time.day == now.day &&
+          h.time.hour == now.hour) {
+        return h;
       }
     }
 
-    return closest;
+    return null;
   }
+
+  // HourlyForecast? getCurrentForecast() {
+  //   if (hourly.isEmpty) return null;
+  //
+  //   final now = DateTime.now();
+  //
+  //   HourlyForecast closest = hourly.first;
+  //   Duration bestDiff = now.difference(closest.time).abs();
+  //
+  //   for (final h in hourly) {
+  //     final diff = now.difference(h.time).abs();
+  //     if (diff < bestDiff) {
+  //       bestDiff = diff;
+  //       closest = h;
+  //     }
+  //   }
+  //
+  //   return closest;
+  // }
 
   SunTimes? getTodaySunTimes() {
     if (sun.isEmpty) return null;
