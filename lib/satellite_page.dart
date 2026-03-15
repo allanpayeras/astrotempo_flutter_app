@@ -79,7 +79,11 @@ class _SatellitePageState extends State<SatellitePage> {
   bool isPlaying = false;
   Timer? _animationTimer;
 
+  bool _circleMenuExpanded = false;
+
   bool _distanceCirclesVisible = false;
+  bool _horizonCirclesVisible = false;
+
   bool _gpsLocationVisible = false;
   bool _tapLocationVisible = false;
 
@@ -442,6 +446,7 @@ class _SatellitePageState extends State<SatellitePage> {
     if (_tapLocationVisible) {
       // disable horizon circles
       _removeDistanceCircles();
+      _removeHorizonCircles();
 
       // if a previous tap location is active, remove it
       try {
@@ -470,6 +475,10 @@ class _SatellitePageState extends State<SatellitePage> {
       if (_distanceCirclesVisible) {
         _addDistanceCircles(_tapPosition);
       }
+
+      if (_horizonCirclesVisible) {
+        _addHorizonCircles(_tapPosition);
+      }
     }
 
     await _controller!.setLayerVisibility(
@@ -482,6 +491,15 @@ class _SatellitePageState extends State<SatellitePage> {
   // Distance Circles (Real meters)
   // ============================
 
+  void _removeHorizonCircles() {
+    try {
+      _controller!.removeLayer("horizon_circles_layer");
+    } catch (_) {}
+    try {
+      _controller!.removeSource("horizon_circles_source");
+    } catch (_) {}
+  }
+
   void _removeDistanceCircles() {
     try {
       _controller!.removeLayer("distance_circles_layer");
@@ -491,10 +509,50 @@ class _SatellitePageState extends State<SatellitePage> {
     } catch (_) {}
   }
 
-  Future<void> _addDistanceCircles(Position pos) async {
+  Future<void> _addHorizonCircles(Position pos) async {
     if (_controller == null) return;
 
     const radii = [5500.0, 19200.0, 35500.0]; // meters
+
+    // Remove old source/layer if exists
+    _removeHorizonCircles();
+
+    List features = [];
+
+    for (double radius in radii) {
+      final circleCoords = _generateCircle(pos.latitude, pos.longitude, radius);
+
+      features.add({
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [circleCoords],
+        },
+        "properties": {"radius": radius},
+      });
+    }
+
+    final geoJson = {"type": "FeatureCollection", "features": features};
+
+    await _controller!.addGeoJsonSource("horizon_circles_source", geoJson);
+
+    // Add only border (no fill layer)
+    await _controller!.addLineLayer(
+      "horizon_circles_source",
+      "horizon_circles_layer",
+      LineLayerProperties(
+        lineColor: "#00FFFF",
+        lineWidth: 1.0,
+        lineOpacity: 0.8,
+      ),
+      belowLayerId: "user_position_layer",
+    );
+  }
+
+  Future<void> _addDistanceCircles(Position pos) async {
+    if (_controller == null) return;
+
+    const radii = [50000.0, 100000.0, 200000.0]; // meters
 
     // Remove old source/layer if exists
     _removeDistanceCircles();
@@ -523,9 +581,10 @@ class _SatellitePageState extends State<SatellitePage> {
       "distance_circles_source",
       "distance_circles_layer",
       LineLayerProperties(
-        lineColor: "#00FFFF",
+        lineColor: "#E4EBEB",
         lineWidth: 1.0,
-        lineOpacity: 0.8,
+        lineOpacity: 1.0,
+        lineDasharray: [2.0, 2.0], // dash length, gap length
       ),
       belowLayerId: "user_position_layer",
     );
@@ -595,6 +654,7 @@ class _SatellitePageState extends State<SatellitePage> {
   Future<void> _updateUserLocation() async {
     if (_gpsLocationVisible) {
       _removeDistanceCircles();
+      _removeHorizonCircles();
 
       final userPosition = await getGpsPosition();
 
@@ -620,6 +680,10 @@ class _SatellitePageState extends State<SatellitePage> {
       // if horizon circles were active, show them in new tap coords.
       if (_distanceCirclesVisible) {
         _addDistanceCircles(_userPosition);
+      }
+
+      if (_horizonCirclesVisible) {
+        _addHorizonCircles(_userPosition);
       }
     }
 
@@ -718,40 +782,87 @@ class _SatellitePageState extends State<SatellitePage> {
               Positioned(
                 bottom: 155,
                 right: 10,
-                child: FloatingActionButton(
-                  backgroundColor: Theme.of(context)
-                      .floatingActionButtonTheme
-                      .backgroundColor
-                      ?.withValues(alpha: 0.95),
-                  // backgroundColor: _distanceCirclesVisible
-                  //     ? Theme.of(context)
-                  //           .floatingActionButtonTheme
-                  //           .backgroundColor
-                  //           ?.withValues(alpha: 1.0)
-                  //     : Theme.of(context)
-                  //           .floatingActionButtonTheme
-                  //           .backgroundColor
-                  //           ?.withValues(alpha: 0.9),
-                  onPressed: () {
-                    setState(() {
-                      if (_distanceCirclesVisible) {
-                        _removeDistanceCircles();
-                        _distanceCirclesVisible = false;
-                      } else {
-                        Position circlesPosition = copyPositionWith(
-                          _userPosition,
-                        );
-                        if (_gpsLocationVisible) {
-                          circlesPosition = _userPosition;
-                        } else if (_tapLocationVisible) {
-                          circlesPosition = _tapPosition;
-                        }
-                        _addDistanceCircles(circlesPosition);
-                        _distanceCirclesVisible = true;
-                      }
-                    });
-                  },
-                  child: const Icon(Icons.circle_outlined),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_circleMenuExpanded) ...[
+                      FloatingActionButton.extended(
+                        heroTag: "distance_btn",
+                        label: const Text("Distance"),
+                        icon: const Icon(Icons.radio_button_unchecked),
+                        backgroundColor: _distanceCirclesVisible
+                            ? Colors.blue
+                            : Theme.of(context)
+                                  .floatingActionButtonTheme
+                                  .backgroundColor
+                                  ?.withValues(alpha: 0.95),
+                        onPressed: () {
+                          setState(() {
+                            Position circlesPosition = _gpsLocationVisible
+                                ? _userPosition
+                                : _tapPosition;
+
+                            if (_distanceCirclesVisible) {
+                              _removeDistanceCircles();
+                              _distanceCirclesVisible = false;
+                            } else {
+                              _addDistanceCircles(circlesPosition);
+                              _distanceCirclesVisible = true;
+                            }
+                          });
+                        },
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      FloatingActionButton.extended(
+                        heroTag: "horizon_btn",
+                        label: const Text("Horizon"),
+                        icon: const Icon(Icons.circle_outlined),
+                        backgroundColor: _horizonCirclesVisible
+                            ? Colors.blue
+                            : Theme.of(context)
+                                  .floatingActionButtonTheme
+                                  .backgroundColor
+                                  ?.withValues(alpha: 0.95),
+                        onPressed: () {
+                          setState(() {
+                            Position circlesPosition = _gpsLocationVisible
+                                ? _userPosition
+                                : _tapPosition;
+
+                            if (_horizonCirclesVisible) {
+                              _removeHorizonCircles();
+                              _horizonCirclesVisible = false;
+                            } else {
+                              _addHorizonCircles(circlesPosition);
+                              _horizonCirclesVisible = true;
+                            }
+                          });
+                        },
+                      ),
+
+                      const SizedBox(width: 8),
+                    ],
+
+                    FloatingActionButton(
+                      heroTag: "circle_menu",
+                      backgroundColor: Theme.of(context)
+                          .floatingActionButtonTheme
+                          .backgroundColor
+                          ?.withValues(alpha: 0.95),
+                      onPressed: () {
+                        setState(() {
+                          _circleMenuExpanded = !_circleMenuExpanded;
+                        });
+                      },
+                      child: Icon(
+                        _circleMenuExpanded
+                            ? Icons.close
+                            : Icons.circle_outlined,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
