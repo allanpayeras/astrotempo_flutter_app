@@ -154,6 +154,121 @@ class _ForecastPageState extends State<ForecastPage> {
     });
   }
 
+  String cloudLabel(double cloud) {
+    if (cloud <= 20) return "Clear";
+    if (cloud <= 40) return "Mostly clear";
+    if (cloud <= 60) return "Partially cloudy";
+    if (cloud <= 80) return "Mostly cloudy";
+    return "Cloudy";
+  }
+
+  HourlyForecast? getCurrentForecast() {
+    if (hourly.isEmpty) return null;
+
+    final now = DateTime.now();
+
+    HourlyForecast closest = hourly.first;
+    Duration bestDiff = now.difference(closest.time).abs();
+
+    for (final h in hourly) {
+      final diff = now.difference(h.time).abs();
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        closest = h;
+      }
+    }
+
+    return closest;
+  }
+
+  SunTimes? getTodaySunTimes() {
+    if (sun.isEmpty) return null;
+
+    final now = DateTime.now();
+
+    return sun.firstWhere(
+      (s) =>
+          s.sunrise.year == now.year &&
+          s.sunrise.month == now.month &&
+          s.sunrise.day == now.day,
+      orElse: () => sun.first,
+    );
+  }
+
+  Map<String, dynamic> getMoonStatus() {
+    if (moon.isEmpty) {
+      return {"up": false, "time": null};
+    }
+
+    final now = DateTime.now();
+
+    MoonMinute? prev;
+    MoonMinute? next;
+
+    for (final m in moon) {
+      if (m.time.isBefore(now)) prev = m;
+      if (m.time.isAfter(now)) {
+        next = m;
+        break;
+      }
+    }
+
+    final moonUp = prev?.illumination != null;
+
+    DateTime? eventTime;
+
+    if (moonUp) {
+      // next moonset
+      final m = moon.firstWhere(
+        (m) => m.time.isAfter(now) && m.illumination == null,
+        orElse: () => MoonMinute(time: now, illumination: null),
+      );
+
+      if (m.time != now) eventTime = m.time;
+    } else {
+      // next moonrise
+      final m = moon.firstWhere(
+        (m) => m.time.isAfter(now) && m.illumination != null,
+        orElse: () => MoonMinute(time: now, illumination: null),
+      );
+
+      if (m.time != now) eventTime = m.time;
+    }
+
+    return {"up": moonUp, "time": eventTime};
+  }
+
+  Widget infoCard(String title, List<Widget> content) {
+    return Container(
+      width: 130,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const Spacer(),
+          ...content,
+        ],
+      ),
+    );
+  }
+
+  String cloudBackground(double cloud) {
+    if (cloud <= 20) return "images/clear.PNG";
+    if (cloud <= 40) return "images/mostly_clear.PNG";
+    if (cloud <= 60) return "images/partially_cloudy.PNG";
+    if (cloud <= 80) return "images/cloudy.jpg";
+    return "images/cloudy.jpg";
+  }
+
   Future<void> fetchData() async {
     try {
       final url =
@@ -1044,138 +1159,314 @@ class _ForecastPageState extends State<ForecastPage> {
       return const Center(child: Text("No forecast data"));
     }
 
+    final current = getCurrentForecast();
+    final bgImage = current != null
+        ? cloudBackground(current.cloud)
+        : "images/clear.PNG";
+
     // final totalWidth = hourly.length * hourWidth;
 
-    return SafeArea(
-      child: ListView(
+    return Scaffold(
+      body: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
-            child: Row(
+          /// BACKGROUND IMAGE
+          Positioned.fill(child: Image.asset(bgImage, fit: BoxFit.cover)),
+
+          /// DARK OVERLAY (improves readability)
+          Positioned.fill(
+            child: Container(color: Colors.black.withValues(alpha: 0.35)),
+          ),
+
+          /// FOREGROUND CONTENT
+          SafeArea(
+            child: ListView(
               children: [
-                Expanded(
-                  child: Text(
-                    locationLabel.isEmpty
-                        ? "($currentLat, $currentLon)"
-                        : locationLabel,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 6,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          locationLabel.isEmpty
+                              ? "($currentLat, $currentLon)"
+                              : locationLabel,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.my_location),
+                        tooltip: "Use current location",
+                        onPressed: loadCurrentLocation,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.search),
+                        tooltip: "Search location",
+                        onPressed: openLocationSearch,
+                      ),
+                    ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.my_location),
-                  tooltip: "Use current location",
-                  onPressed: loadCurrentLocation,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.search),
-                  tooltip: "Search location",
-                  onPressed: openLocationSearch,
-                ),
-              ],
-            ),
-          ),
-          SizedBox(
-            height: 200.0,
-            child: Center(child: Text('For tonight / Now')),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  left: 15.0,
-                  right: 15.0,
-                  bottom: 15.0,
-                  top: 8.0,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Next hours'),
-                    Divider(thickness: 1.0),
-                    SizedBox(height: 5.0),
-                    SizedBox(
-                      height: 100,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                SizedBox(
+                  height: 300,
+                  child: Builder(
+                    builder: (context) {
+                      final current = getCurrentForecast();
+
+                      if (current == null) {
+                        return const Center(child: Text("No data"));
+                      }
+
+                      final cloud = current.cloud;
+                      final label = cloudLabel(cloud);
+                      // final image = cloudBackground(cloud);
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          SizedBox(
-                            width: 20,
-                            child: Column(
-                              children: [
-                                const SizedBox(
-                                  height: 35,
-                                ), // aligns with hour row
-                                _rowLabel(Icons.cloud, "Cloud"),
-                                const SizedBox(height: 20),
-                                _rowLabel(Icons.nightlight, "Moon"),
-                              ],
+                          const SizedBox(height: 20),
+                          Column(
+                            children: [
+                              const Text(
+                                "Now",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                label,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 70),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                            child: Builder(
+                              builder: (context) {
+                                final current = getCurrentForecast();
+                                if (current == null) {
+                                  return const Center(child: Text("No data"));
+                                }
+
+                                final sunTimes = getTodaySunTimes();
+                                final moonStatus = getMoonStatus();
+                                final moonUp = moonStatus["up"] as bool;
+                                final moonEvent =
+                                    moonStatus["time"] as DateTime?;
+
+                                final fmt = DateFormat("HH:mm");
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                      height: 100,
+                                      child: ListView(
+                                        scrollDirection: Axis.horizontal,
+                                        children: [
+                                          /// CLOUD COVER
+                                          infoCard("Cloud cover", [
+                                            Text(
+                                              "${current.cloud.round()}%",
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 24,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ]),
+
+                                          /// SUN TIMES
+                                          infoCard("Sun", [
+                                            if (sunTimes != null) ...[
+                                              Text(
+                                                "↑ ${fmt.format(sunTimes.sunrise)}",
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                              Text(
+                                                "↓ ${fmt.format(sunTimes.sunset)}",
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ],
+                                          ]),
+
+                                          /// MOON STATUS
+                                          infoCard("Moon", [
+                                            Text(
+                                              moonUp ? "Up" : "Down",
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            if (moonEvent != null)
+                                              Text(
+                                                moonUp
+                                                    ? "Sets ${fmt.format(moonEvent)}"
+                                                    : "Rises ${fmt.format(moonEvent)}",
+                                                style: const TextStyle(
+                                                  color: Colors.white70,
+                                                ),
+                                              ),
+                                          ]),
+
+                                          /// TEMPERATURE
+                                          infoCard("Temperature", [
+                                            Text(
+                                              "${current.temp.round()}°C",
+                                              style: const TextStyle(
+                                                color: Colors.orange,
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            Text(
+                                              "Dew ${current.dew.round()}°C",
+                                              style: const TextStyle(
+                                                color: Colors.greenAccent,
+                                              ),
+                                            ),
+                                          ]),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                           ),
-                          SizedBox(width: 10.0),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: SizedBox(
-                                width: hourWidth * 36,
-                                height: 100,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTapUp: (details) {
-                                    final dx = details.localPosition.dx;
-                                    final index = (dx / hourWidth).floor();
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: 15.0,
+                        right: 15.0,
+                        bottom: 15.0,
+                        top: 8.0,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Next hours'),
+                          Divider(thickness: 1.0),
+                          SizedBox(height: 5.0),
+                          SizedBox(
+                            height: 100,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  child: Column(
+                                    children: [
+                                      const SizedBox(
+                                        height: 35,
+                                      ), // aligns with hour row
+                                      _rowLabel(Icons.cloud, "Cloud"),
+                                      const SizedBox(height: 20),
+                                      _rowLabel(Icons.nightlight, "Moon"),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(width: 10.0),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: SizedBox(
+                                      width: hourWidth * 36,
+                                      height: 100,
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTapUp: (details) {
+                                          final dx = details.localPosition.dx;
+                                          final index = (dx / hourWidth)
+                                              .floor();
 
-                                    final painter = NextHoursForecastPainter(
-                                      hourly: hourly,
-                                      moon: moon,
-                                      sun: sun,
-                                      hourWidth: hourWidth,
-                                    );
+                                          final painter =
+                                              NextHoursForecastPainter(
+                                                hourly: hourly,
+                                                moon: moon,
+                                                sun: sun,
+                                                hourWidth: hourWidth,
+                                              );
 
-                                    final hours = painter.visibleHours;
+                                          final hours = painter.visibleHours;
 
-                                    if (index >= 0 && index < hours.length) {
-                                      openDetailedForecast(hours[index].time);
-                                    }
-                                  },
-                                  child: CustomPaint(
-                                    painter: NextHoursForecastPainter(
-                                      hourly: hourly,
-                                      moon: moon,
-                                      sun: sun,
-                                      hourWidth: hourWidth,
+                                          if (index >= 0 &&
+                                              index < hours.length) {
+                                            openDetailedForecast(
+                                              hours[index].time,
+                                            );
+                                          }
+                                        },
+                                        child: CustomPaint(
+                                          painter: NextHoursForecastPainter(
+                                            hourly: hourly,
+                                            moon: moon,
+                                            sun: sun,
+                                            hourWidth: hourWidth,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                SizedBox(height: 20.0),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(15.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Next days"),
+                          Divider(),
+                          buildDailyTable(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 20.0),
+              ],
             ),
           ),
-          SizedBox(height: 20.0),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(15.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [Text("Next days"), Divider(), buildDailyTable()],
-                ),
-              ),
-            ),
-          ),
-          SizedBox(height: 20.0),
         ],
       ),
     );
