@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'dart:ui' as ui;
@@ -64,6 +65,32 @@ class DailyCloudSummary {
   });
 }
 
+class LocationResult {
+  final String name;
+  final String country;
+  final String? state;
+  final double lat;
+  final double lon;
+
+  LocationResult({
+    required this.name,
+    required this.country,
+    required this.lat,
+    required this.lon,
+    this.state,
+  });
+
+  factory LocationResult.fromJson(Map<String, dynamic> json) {
+    return LocationResult(
+      name: json["name"],
+      country: json["country"] ?? "",
+      state: json["admin1"], // ← state / province
+      lat: (json["latitude"] as num).toDouble(),
+      lon: (json["longitude"] as num).toDouble(),
+    );
+  }
+}
+
 /// =======================================================
 /// PAGE
 /// =======================================================
@@ -95,9 +122,17 @@ class _ForecastPageState extends State<ForecastPage> {
   late final ScrollController dayScrollController;
   bool _syncingScroll = false;
 
+  late double currentLat;
+  late double currentLon;
+
+  String locationLabel = "";
+
   @override
   void initState() {
     super.initState();
+
+    currentLat = widget.lat;
+    currentLon = widget.lon;
 
     detailedScrollController = ScrollController();
     dayScrollController = ScrollController();
@@ -105,13 +140,25 @@ class _ForecastPageState extends State<ForecastPage> {
     detailedScrollController.addListener(_syncDayScroll);
 
     fetchData();
+    print(currentLat);
+    print(currentLon);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final label = await reverseGeocode(currentLat, currentLon - 360.0);
+
+      if (label != null) {
+        setState(() {
+          locationLabel = label;
+        });
+      }
+    });
   }
 
   Future<void> fetchData() async {
     try {
       final url =
           "https://forecast.astrotempo.org/forecast"
-          "?lat=${widget.lat}&lon=${widget.lon}";
+          "?lat=$currentLat&lon=$currentLon";
 
       final response = await http.get(Uri.parse(url));
 
@@ -192,6 +239,239 @@ class _ForecastPageState extends State<ForecastPage> {
     return days;
   }
 
+  Future<String?> reverseGeocode(double lat, double lon) async {
+    try {
+      final url =
+          "https://nominatim.openstreetmap.org/reverse"
+          "?lat=$lat&lon=$lon&format=json";
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {"User-Agent": "astrotempo-app"}, // required by Nominatim
+      );
+
+      if (response.statusCode != 200) {
+        print("reverse geocode status: ${response.statusCode}");
+        return null;
+      }
+
+      final json = jsonDecode(response.body);
+
+      final address = json["address"];
+
+      final city =
+          address["city"] ??
+          address["town"] ??
+          address["village"] ??
+          address["municipality"];
+
+      final state = address["state"];
+
+      if (city == null) return null;
+
+      return state != null ? "$city, $state" : city;
+    } catch (e) {
+      debugPrint("Reverse geocode error: $e");
+      return null;
+    }
+  }
+
+  Future<void> loadCurrentLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint("Location services disabled");
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          debugPrint("Location permission denied");
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        debugPrint("Location permission permanently denied");
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      print(position);
+
+      final label = await reverseGeocode(position.latitude, position.longitude);
+
+      setState(() {
+        currentLat = position.latitude;
+        currentLon = position.longitude;
+
+        if (currentLon < 0) currentLon += 360;
+
+        if (label != null) locationLabel = label;
+
+        loading = true;
+      });
+
+      fetchData();
+    } catch (e) {
+      debugPrint("Location error: $e");
+    }
+  }
+
+  Future<List<LocationResult>> searchLocation(String query) async {
+    if (query.isEmpty) return [];
+
+    final url =
+        "https://geocoding-api.open-meteo.com/v1/search?name=$query&count=10";
+
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode != 200) return [];
+
+    final json = jsonDecode(response.body);
+
+    if (json["results"] == null) return [];
+
+    return (json["results"] as List)
+        .map((e) => LocationResult.fromJson(e))
+        .toList();
+  }
+
+  void openLocationSearch() {
+    final controller = TextEditingController();
+    List<LocationResult> results = [];
+
+    showModalBottomSheet(
+      enableDrag: true,
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final height = MediaQuery.of(context).size.height * 0.9;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return SizedBox(
+              height: height,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 5.0),
+
+                    /// HANDLE
+                    SizedBox(
+                      height: 20,
+                      child: Center(
+                        child: Container(
+                          width: 60,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.grey,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 15),
+
+                    /// TITLE
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          "Search location",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    /// SEARCH FIELD
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: TextField(
+                        controller: controller,
+                        decoration: const InputDecoration(
+                          hintText: "Enter city name",
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (text) async {
+                          final r = await searchLocation(text);
+                          setModalState(() => results = r);
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    /// RESULTS
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: results.length,
+                        itemBuilder: (context, i) {
+                          final loc = results[i];
+
+                          return ListTile(
+                            title: Text(
+                              loc.state != null
+                                  ? "${loc.name}, ${loc.state}"
+                                  : loc.name,
+                            ),
+                            subtitle: Text(loc.country),
+                            onTap: () {
+                              Navigator.pop(context);
+
+                              setState(() {
+                                currentLat = loc.lat;
+                                currentLon = loc.lon;
+
+                                if (currentLon < 0) {
+                                  currentLon += 360.0;
+                                }
+
+                                locationLabel = loc.state != null
+                                    ? "${loc.name}, ${loc.state}"
+                                    : loc.name;
+
+                                loading = true;
+                              });
+
+                              fetchData();
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _syncDayScroll() {
     if (_syncingScroll) return;
 
@@ -252,7 +532,7 @@ class _ForecastPageState extends State<ForecastPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      enableDrag: false,
+      enableDrag: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return StatefulBuilder(
@@ -281,7 +561,7 @@ class _ForecastPageState extends State<ForecastPage> {
               });
             }
 
-            final height = MediaQuery.of(context).size.height * 0.8;
+            final height = MediaQuery.of(context).size.height * 0.9;
 
             return SizedBox(
               height: height,
@@ -297,23 +577,15 @@ class _ForecastPageState extends State<ForecastPage> {
                     const SizedBox(height: 5),
 
                     /// HANDLE (drag down to dismiss)
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onVerticalDragUpdate: (details) {
-                        if (details.delta.dy > 6) {
-                          Navigator.pop(context);
-                        }
-                      },
-                      child: SizedBox(
-                        height: 20,
-                        child: Center(
-                          child: Container(
-                            width: 60,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: Colors.grey,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                    SizedBox(
+                      height: 20,
+                      child: Center(
+                        child: Container(
+                          width: 60,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.grey,
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                       ),
@@ -543,6 +815,7 @@ class _ForecastPageState extends State<ForecastPage> {
     if (value.isNaN) return const SizedBox(height: 26);
 
     final color = cloudColor(value);
+    final fontColor = value > 60 ? Colors.black87 : Colors.white;
 
     return GestureDetector(
       onTap: onTap,
@@ -557,10 +830,10 @@ class _ForecastPageState extends State<ForecastPage> {
           alignment: Alignment.center,
           child: Text(
             "${value.round()}",
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.normal,
-              color: Colors.black,
+              color: fontColor,
             ),
           ),
         ),
@@ -776,6 +1049,35 @@ class _ForecastPageState extends State<ForecastPage> {
     return SafeArea(
       child: ListView(
         children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    locationLabel.isEmpty
+                        ? "($currentLat, $currentLon)"
+                        : locationLabel,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.my_location),
+                  tooltip: "Use current location",
+                  onPressed: loadCurrentLocation,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  tooltip: "Search location",
+                  onPressed: openLocationSearch,
+                ),
+              ],
+            ),
+          ),
           SizedBox(
             height: 200.0,
             child: Center(child: Text('For tonight / Now')),
@@ -1036,6 +1338,22 @@ class NextHoursForecastPainter extends CustomPainter {
   // CLOUD ROW
   // =======================================================
 
+  // void drawCloudRow(Canvas canvas, double y, List<HourlyForecast> hours) {
+  //   for (int i = 0; i < hours.length; i++) {
+  //     final rect = Rect.fromLTWH(
+  //       i * hourWidth + xMargin / 2.0,
+  //       y,
+  //       hourWidth - xMargin,
+  //       rowCloud - yMargin,
+  //     );
+  //
+  //     final radius = (rowCloud - yMargin) / 2;
+  //     final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
+  //
+  //     canvas.drawRRect(rrect, Paint()..color = cloudColor(hours[i].cloud));
+  //   }
+  // }
+
   void drawCloudRow(Canvas canvas, double y, List<HourlyForecast> hours) {
     for (int i = 0; i < hours.length; i++) {
       final rect = Rect.fromLTWH(
@@ -1048,7 +1366,29 @@ class NextHoursForecastPainter extends CustomPainter {
       final radius = (rowCloud - yMargin) / 2;
       final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
 
+      final cloudValue = hours[i].cloud.round();
+
       canvas.drawRRect(rrect, Paint()..color = cloudColor(hours[i].cloud));
+
+      final fontColor = cloudValue > 60 ? Colors.black87 : Colors.white;
+
+      double xOffset = cloudValue < 10
+          ? 3
+          : cloudValue < 100
+          ? 6
+          : 8.5;
+
+      // CLOUD NUMBER
+      drawText(
+        canvas,
+        "$cloudValue",
+        Offset(
+          rect.left + rect.width / 2 - xOffset,
+          rect.top + rect.height / 2 - 6,
+        ),
+        fontSize: 10,
+        fontColor: fontColor,
+      );
     }
   }
 
@@ -1090,6 +1430,7 @@ class NextHoursForecastPainter extends CustomPainter {
     Canvas canvas,
     String text,
     Offset offset, {
+    Color fontColor = Colors.white,
     double fontSize = 10,
     bool bold = false,
   }) {
@@ -1098,7 +1439,7 @@ class NextHoursForecastPainter extends CustomPainter {
         text: text,
         style: TextStyle(
           fontSize: fontSize,
-          color: Colors.white,
+          color: fontColor,
           fontWeight: bold ? FontWeight.bold : FontWeight.normal,
         ),
       ),
@@ -1290,9 +1631,33 @@ class DetailedForecastPainter extends CustomPainter {
         hourWidth - xMargin,
         rowCloud - yMargin,
       );
+
       final radius = (rowCloud - yMargin) / 2;
       final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
+
+      final cloudValue = hourly[i].cloud.round();
+
       canvas.drawRRect(rrect, Paint()..color = cloudColor(hourly[i].cloud));
+
+      final fontColor = cloudValue > 60 ? Colors.black87 : Colors.white;
+
+      double xOffset = cloudValue < 10
+          ? 3
+          : cloudValue < 100
+          ? 6
+          : 8.5;
+
+      // CLOUD NUMBER
+      drawText(
+        canvas,
+        "$cloudValue",
+        Offset(
+          rect.left + rect.width / 2 - xOffset,
+          rect.top + rect.height / 2 - 6,
+        ),
+        fontSize: 10,
+        fontColor: fontColor,
+      );
     }
   }
 
@@ -1432,6 +1797,7 @@ class DetailedForecastPainter extends CustomPainter {
     Canvas canvas,
     String text,
     Offset offset, {
+    Color fontColor = Colors.white,
     double fontSize = 10,
     bool bold = false,
   }) {
@@ -1440,7 +1806,7 @@ class DetailedForecastPainter extends CustomPainter {
         text: text,
         style: TextStyle(
           fontSize: fontSize,
-          color: Colors.white,
+          color: fontColor,
           fontWeight: bold ? FontWeight.bold : FontWeight.normal,
         ),
       ),
