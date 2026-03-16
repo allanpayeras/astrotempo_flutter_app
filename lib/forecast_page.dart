@@ -179,25 +179,6 @@ class _ForecastPageState extends State<ForecastPage> {
     return null;
   }
 
-  // HourlyForecast? getCurrentForecast() {
-  //   if (hourly.isEmpty) return null;
-  //
-  //   final now = DateTime.now();
-  //
-  //   HourlyForecast closest = hourly.first;
-  //   Duration bestDiff = now.difference(closest.time).abs();
-  //
-  //   for (final h in hourly) {
-  //     final diff = now.difference(h.time).abs();
-  //     if (diff < bestDiff) {
-  //       bestDiff = diff;
-  //       closest = h;
-  //     }
-  //   }
-  //
-  //   return closest;
-  // }
-
   SunTimes? getTodaySunTimes() {
     if (sun.isEmpty) return null;
 
@@ -282,8 +263,8 @@ class _ForecastPageState extends State<ForecastPage> {
     if (cloud <= 20) return "images/clear.PNG";
     if (cloud <= 40) return "images/mostly_clear.PNG";
     if (cloud <= 60) return "images/partially_cloudy.PNG";
-    if (cloud <= 80) return "images/cloudy.jpg";
-    return "images/cloudy.jpg";
+    if (cloud <= 80) return "images/cloudy.PNG";
+    return "images/cloudy.PNG";
   }
 
   Future<void> fetchData() async {
@@ -1353,7 +1334,7 @@ class _ForecastPageState extends State<ForecastPage> {
                                             Text(
                                               "${current.temp.round()}°C",
                                               style: const TextStyle(
-                                                color: Colors.orange,
+                                                color: Colors.white,
                                                 fontSize: 20,
                                                 fontWeight: FontWeight.bold,
                                               ),
@@ -1361,7 +1342,7 @@ class _ForecastPageState extends State<ForecastPage> {
                                             Text(
                                               "Dew ${current.dew.round()}°C",
                                               style: const TextStyle(
-                                                color: Colors.greenAccent,
+                                                color: Colors.white70,
                                               ),
                                             ),
                                           ]),
@@ -1379,7 +1360,7 @@ class _ForecastPageState extends State<ForecastPage> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 5.0),
                   child: Card(
                     child: Padding(
                       padding: const EdgeInsets.only(
@@ -1463,9 +1444,9 @@ class _ForecastPageState extends State<ForecastPage> {
                     ),
                   ),
                 ),
-                SizedBox(height: 20.0),
+                SizedBox(height: 5.0),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 5.0),
                   child: Card(
                     child: Padding(
                       padding: const EdgeInsets.all(15.0),
@@ -1624,19 +1605,19 @@ class NextHoursForecastPainter extends CustomPainter {
 
       canvas.drawRect(
         Rect.fromLTRB(dayStart, 0, dayEnd, size.height),
-        Paint()..color = const Color(0xFF26305A).withValues(alpha: 1.0),
+        Paint()..color = const Color(0xFF2C3B77).withValues(alpha: 1.0),
         // Paint()..color = Colors.white.withValues(alpha: 0.09),
       );
 
       canvas.drawRect(
         Rect.fromLTRB(twilightStart, 0, dayStart, size.height),
-        Paint()..color = const Color(0xFF26305A).withValues(alpha: 0.5),
+        Paint()..color = const Color(0xFF2C3B77).withValues(alpha: 0.5),
         // Paint()..color = Colors.white.withValues(alpha: 0.05),
       );
 
       canvas.drawRect(
         Rect.fromLTRB(dayEnd, 0, twilightEnd, size.height),
-        Paint()..color = const Color(0xFF26305A).withValues(alpha: 0.5),
+        Paint()..color = const Color(0xFF2C3B77).withValues(alpha: 0.5),
         // Paint()..color = Colors.white.withValues(alpha: 0.05),
       );
     }

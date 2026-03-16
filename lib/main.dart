@@ -67,7 +67,7 @@ final ThemeData astroDeepSpaceTheme = ThemeData.dark().copyWith(
   // CARDS
   // =====================================================
   cardTheme: CardThemeData(
-    color: const Color(0xFF12172A),
+    color: const Color(0xFF1E2852).withValues(alpha: 0.8),
     elevation: 2,
     margin: const EdgeInsets.all(8),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -77,7 +77,7 @@ final ThemeData astroDeepSpaceTheme = ThemeData.dark().copyWith(
   // FLOATING ACTION BUTTON
   // =====================================================
   floatingActionButtonTheme: const FloatingActionButtonThemeData(
-    backgroundColor: Color(0xFF12172A), // same as cards
+    backgroundColor: Color(0xFF1E2852), // same as cards
     foregroundColor: Color(0xFFBFC5CF), // light grey
     elevation: 3,
     focusElevation: 4,
