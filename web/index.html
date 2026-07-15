@@ -1,24 +1,12 @@
 <!DOCTYPE html>
-<html>
+<html lang="english">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -31,8 +19,18 @@
 
   <title>astrotempo</title>
   <link rel="manifest" href="manifest.json">
-</head>
-<body>
+
+  <!-- REQUIRED FOR MAPLIBRE_GL 0.26.0+ -->
+  <link
+          href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css"
+          rel="stylesheet">
+
+  <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+
   <script src="flutter_bootstrap.js" async></script>
+</head>
+
+<body>
+<!--<script src="flutter_bootstrap.js" async></script>-->
 </body>
 </html>
