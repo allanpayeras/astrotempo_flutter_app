@@ -753,7 +753,7 @@ class _SatellitePageState extends State<SatellitePage> {
             _updateUserLocation();
             _updateTapPosition();
           },
-          minMaxZoomPreference: MinMaxZoomPreference(4, 17),
+          minMaxZoomPreference: MinMaxZoomPreference(2.5, 17),
           attributionButtonMargins: Point(-100, -100),
           rotateGesturesEnabled: false,
           tiltGesturesEnabled: false,
@@ -761,7 +761,6 @@ class _SatellitePageState extends State<SatellitePage> {
           zoomGesturesEnabled: true,
           compassEnabled: false,
         ),
-
         SafeArea(
           child: Stack(
             children: [
