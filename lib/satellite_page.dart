@@ -180,20 +180,31 @@ class _SatellitePageState extends State<SatellitePage> {
       final data = json.decode(response.body);
       availableTimes = List<String>.from(data["timestamps"]);
 
+      if (availableTimes.isNotEmpty) {
+        setState(() {
+          availableTimes = availableTimes.length > _bufferCount
+              ? availableTimes.sublist(availableTimes.length - _bufferCount)
+              : availableTimes;
+
+          if (currentFrame >= availableTimes.length) {
+            currentFrame = availableTimes.isNotEmpty
+                ? availableTimes.length - 1
+                : 0;
+          }
+
+          _activeIndex = currentFrame;
+        });
+      } else {
+        setState(() {
+          availableTimes = [];
+        });
+        return;
+      }
+    } else {
       setState(() {
-        availableTimes = availableTimes.sublist(
-          availableTimes.length - _bufferCount,
-        );
-
-        // Keep current frame if possible
-        if (currentFrame >= availableTimes.length) {
-          currentFrame = availableTimes.isNotEmpty
-              ? availableTimes.length - 1
-              : 0;
-        }
-
-        _activeIndex = currentFrame;
+        availableTimes = [];
       });
+      return;
     }
   }
 
@@ -753,8 +764,9 @@ class _SatellitePageState extends State<SatellitePage> {
             _updateUserLocation();
             _updateTapPosition();
           },
-          minMaxZoomPreference: MinMaxZoomPreference(2.5, 17),
-          attributionButtonMargins: Point(-100, -100),
+          minMaxZoomPreference: MinMaxZoomPreference(3, 17),
+          attributionButtonMargins: Point(1, 1),
+          attributionButtonPosition: AttributionButtonPosition.topLeft,
           rotateGesturesEnabled: false,
           tiltGesturesEnabled: false,
           scrollGesturesEnabled: true,
