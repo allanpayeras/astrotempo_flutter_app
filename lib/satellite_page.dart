@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 Future<Position> getGpsPosition() async {
   bool serviceEnabled;
@@ -780,122 +781,128 @@ class _SatellitePageState extends State<SatellitePage> {
               Positioned(
                 top: 30,
                 right: 10,
-                child: FloatingActionButton(
-                  backgroundColor: Theme.of(context)
-                      .floatingActionButtonTheme
-                      .backgroundColor
-                      ?.withValues(alpha: 0.95),
-                  onPressed: _openProductSelector,
-                  child: const Icon(Icons.layers),
+                child: PointerInterceptor(
+                  child: FloatingActionButton(
+                    backgroundColor: Theme.of(context)
+                        .floatingActionButtonTheme
+                        .backgroundColor
+                        ?.withValues(alpha: 0.95),
+                    onPressed: _openProductSelector,
+                    child: const Icon(Icons.layers),
+                  ),
                 ),
               ),
 
               Positioned(
                 bottom: 155,
                 right: 10,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_circleMenuExpanded) ...[
-                      FloatingActionButton.extended(
-                        heroTag: "distance_btn",
-                        label: const Text("Distance"),
-                        icon: const Icon(Icons.radio_button_unchecked),
-                        backgroundColor: _distanceCirclesVisible
-                            ? Colors.blue
-                            : Theme.of(context)
-                                  .floatingActionButtonTheme
-                                  .backgroundColor
-                                  ?.withValues(alpha: 0.95),
+                child: PointerInterceptor(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_circleMenuExpanded) ...[
+                        FloatingActionButton.extended(
+                          heroTag: "distance_btn",
+                          label: const Text("Distance"),
+                          icon: const Icon(Icons.radio_button_unchecked),
+                          backgroundColor: _distanceCirclesVisible
+                              ? Colors.blue
+                              : Theme.of(context)
+                                    .floatingActionButtonTheme
+                                    .backgroundColor
+                                    ?.withValues(alpha: 0.95),
+                          onPressed: () {
+                            setState(() {
+                              Position circlesPosition = _gpsLocationVisible
+                                  ? _userPosition
+                                  : _tapPosition;
+
+                              if (_distanceCirclesVisible) {
+                                _removeDistanceCircles();
+                                _distanceCirclesVisible = false;
+                              } else {
+                                _addDistanceCircles(circlesPosition);
+                                _distanceCirclesVisible = true;
+                              }
+                            });
+                          },
+                        ),
+
+                        const SizedBox(width: 8),
+
+                        FloatingActionButton.extended(
+                          heroTag: "horizon_btn",
+                          label: const Text("Horizon"),
+                          icon: const Icon(Icons.circle_outlined),
+                          backgroundColor: _horizonCirclesVisible
+                              ? Colors.blue
+                              : Theme.of(context)
+                                    .floatingActionButtonTheme
+                                    .backgroundColor
+                                    ?.withValues(alpha: 0.95),
+                          onPressed: () {
+                            setState(() {
+                              Position circlesPosition = _gpsLocationVisible
+                                  ? _userPosition
+                                  : _tapPosition;
+
+                              if (_horizonCirclesVisible) {
+                                _removeHorizonCircles();
+                                _horizonCirclesVisible = false;
+                              } else {
+                                _addHorizonCircles(circlesPosition);
+                                _horizonCirclesVisible = true;
+                              }
+                            });
+                          },
+                        ),
+
+                        const SizedBox(width: 8),
+                      ],
+
+                      FloatingActionButton(
+                        heroTag: "circle_menu",
+                        backgroundColor: Theme.of(context)
+                            .floatingActionButtonTheme
+                            .backgroundColor
+                            ?.withValues(alpha: 0.95),
                         onPressed: () {
                           setState(() {
-                            Position circlesPosition = _gpsLocationVisible
-                                ? _userPosition
-                                : _tapPosition;
-
-                            if (_distanceCirclesVisible) {
-                              _removeDistanceCircles();
-                              _distanceCirclesVisible = false;
-                            } else {
-                              _addDistanceCircles(circlesPosition);
-                              _distanceCirclesVisible = true;
-                            }
+                            _circleMenuExpanded = !_circleMenuExpanded;
                           });
                         },
+                        child: Icon(
+                          _circleMenuExpanded
+                              ? Icons.close
+                              : Icons.circle_outlined,
+                        ),
                       ),
-
-                      const SizedBox(width: 8),
-
-                      FloatingActionButton.extended(
-                        heroTag: "horizon_btn",
-                        label: const Text("Horizon"),
-                        icon: const Icon(Icons.circle_outlined),
-                        backgroundColor: _horizonCirclesVisible
-                            ? Colors.blue
-                            : Theme.of(context)
-                                  .floatingActionButtonTheme
-                                  .backgroundColor
-                                  ?.withValues(alpha: 0.95),
-                        onPressed: () {
-                          setState(() {
-                            Position circlesPosition = _gpsLocationVisible
-                                ? _userPosition
-                                : _tapPosition;
-
-                            if (_horizonCirclesVisible) {
-                              _removeHorizonCircles();
-                              _horizonCirclesVisible = false;
-                            } else {
-                              _addHorizonCircles(circlesPosition);
-                              _horizonCirclesVisible = true;
-                            }
-                          });
-                        },
-                      ),
-
-                      const SizedBox(width: 8),
                     ],
-
-                    FloatingActionButton(
-                      heroTag: "circle_menu",
-                      backgroundColor: Theme.of(context)
-                          .floatingActionButtonTheme
-                          .backgroundColor
-                          ?.withValues(alpha: 0.95),
-                      onPressed: () {
-                        setState(() {
-                          _circleMenuExpanded = !_circleMenuExpanded;
-                        });
-                      },
-                      child: Icon(
-                        _circleMenuExpanded
-                            ? Icons.close
-                            : Icons.circle_outlined,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
 
               Positioned(
                 bottom: 90,
                 right: 10,
-                child: FloatingActionButton(
-                  backgroundColor: Theme.of(context)
-                      .floatingActionButtonTheme
-                      .backgroundColor
-                      ?.withValues(alpha: 0.95),
-                  onPressed: () {
-                    setState(() {
-                      _gpsLocationVisible = true;
-                      _tapLocationVisible = false;
-                    });
+                child: PointerInterceptor(
+                  child: FloatingActionButton(
+                    backgroundColor: Theme.of(context)
+                        .floatingActionButtonTheme
+                        .backgroundColor
+                        ?.withValues(alpha: 0.95),
+                    onPressed: () {
+                      setState(() {
+                        _gpsLocationVisible = true;
+                        _tapLocationVisible = false;
+                      });
 
-                    _updateTapPosition();
-                    _updateUserLocation();
-                    _centerOnUser();
-                  },
-                  child: const Icon(Icons.my_location),
+                      _updateTapPosition();
+                      _updateUserLocation();
+                      _centerOnUser();
+                    },
+                    child: const Icon(Icons.my_location),
+                  ),
                 ),
               ),
               if (selectedProduct != "none" && availableTimes.isNotEmpty)
@@ -904,83 +911,86 @@ class _SatellitePageState extends State<SatellitePage> {
                   left: 0,
                   right: 0,
                   bottom: 5,
-                  child: Card(
-                    color: Theme.of(context)
-                        .floatingActionButtonTheme
-                        .backgroundColor
-                        ?.withValues(alpha: 0.95),
-                    elevation: 4,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Theme(
-                            data: Theme.of(context).copyWith(
-                              splashFactory: NoSplash.splashFactory,
-                              highlightColor: Colors.transparent,
-                              splashColor: Colors.transparent,
-                            ),
-                            child: IconButton(
-                              icon: Icon(
-                                isPlaying ? Icons.pause : Icons.play_arrow,
+                  child: PointerInterceptor(
+                    child: Card(
+                      color: Theme.of(context)
+                          .floatingActionButtonTheme
+                          .backgroundColor
+                          ?.withValues(alpha: 0.95),
+                      elevation: 4,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Theme(
+                              data: Theme.of(context).copyWith(
+                                splashFactory: NoSplash.splashFactory,
+                                highlightColor: Colors.transparent,
+                                splashColor: Colors.transparent,
                               ),
-                              iconSize: 40,
-                              highlightColor: Colors.black.withValues(
-                                alpha: 0.0,
+                              child: IconButton(
+                                icon: Icon(
+                                  isPlaying ? Icons.pause : Icons.play_arrow,
+                                ),
+                                iconSize: 40,
+                                highlightColor: Colors.black.withValues(
+                                  alpha: 0.0,
+                                ),
+                                enableFeedback: false,
+                                onPressed: _togglePlay,
                               ),
-                              enableFeedback: false,
-                              onPressed: _togglePlay,
                             ),
-                          ),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 14.0),
-                                  child: Text(
-                                    _getFrameTimestamp(),
-                                    style: const TextStyle(
-                                      color: Color(0xFFBFC5CF),
-                                      height: 0.4,
-                                      fontSize: 14,
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 14.0),
+                                    child: Text(
+                                      _getFrameTimestamp(),
+                                      style: const TextStyle(
+                                        color: Color(0xFFBFC5CF),
+                                        height: 0.4,
+                                        fontSize: 14,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    trackHeight: 3,
-                                    activeTrackColor: Color(0xFFBFC5CF),
-                                    inactiveTrackColor: Color(0xFF20274A),
-                                    thumbColor: Colors.blueGrey.shade500,
-                                    overlayColor: Colors.blue.withValues(
-                                      alpha: 0.0,
+                                  SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      trackHeight: 3,
+                                      activeTrackColor: Color(0xFFBFC5CF),
+                                      inactiveTrackColor: Color(0xFF20274A),
+                                      thumbColor: Colors.blueGrey.shade500,
+                                      overlayColor: Colors.blue.withValues(
+                                        alpha: 0.0,
+                                      ),
+                                      thumbShape: HandleThumbShape(),
+                                      thumbSize: const WidgetStatePropertyAll(
+                                        Size(17, 17),
+                                      ),
                                     ),
-                                    thumbShape: HandleThumbShape(),
-                                    thumbSize: const WidgetStatePropertyAll(
-                                      Size(17, 17),
+                                    child: Slider(
+                                      min: 0,
+                                      max: (availableTimes.length - 1)
+                                          .toDouble(),
+                                      value: currentFrame.toDouble(),
+                                      divisions: availableTimes.length - 1,
+                                      onChanged: (value) {
+                                        _onSliderChanged(value.toDouble());
+                                      },
+                                      padding: const EdgeInsets.only(
+                                        // bottom: 0.0,
+                                        left: 15.0,
+                                        right: 20.0,
+                                      ),
                                     ),
                                   ),
-                                  child: Slider(
-                                    min: 0,
-                                    max: (availableTimes.length - 1).toDouble(),
-                                    value: currentFrame.toDouble(),
-                                    divisions: availableTimes.length - 1,
-                                    onChanged: (value) {
-                                      _onSliderChanged(value.toDouble());
-                                    },
-                                    padding: const EdgeInsets.only(
-                                      // bottom: 0.0,
-                                      left: 15.0,
-                                      right: 20.0,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
