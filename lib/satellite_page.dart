@@ -417,37 +417,39 @@ class _SatellitePageState extends State<SatellitePage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Select Satellite Product",
-                style: TextStyle(
-                  // color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ...products.map(
-                (product) => ListTile(
-                  title: Text(
-                    // product.toUpperCase(),
-                    _productLabels[product] ?? product.toUpperCase(),
-                    style: const TextStyle(color: Colors.white),
+        return PointerInterceptor(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  "Select Satellite Product",
+                  style: TextStyle(
+                    // color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
-                  trailing: selectedProduct == product
-                      ? const Icon(Icons.check, color: Colors.green)
-                      : null,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _changeProduct(product);
-                  },
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                ...products.map(
+                  (product) => ListTile(
+                    title: Text(
+                      // product.toUpperCase(),
+                      _productLabels[product] ?? product.toUpperCase(),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    trailing: selectedProduct == product
+                        ? const Icon(Icons.check, color: Colors.green)
+                        : null,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _changeProduct(product);
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
