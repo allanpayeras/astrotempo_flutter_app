@@ -2,7 +2,8 @@ import 'package:astrotempo/forecast_page.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'satellite_page.dart';
-
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 final ThemeData astroDeepSpaceTheme = ThemeData.dark().copyWith(
   // =====================================================
   // CORE COLORS
@@ -222,11 +223,17 @@ class _MainPageState extends State<MainPage> {
   double? _lon;
   bool _loading = true;
   String? _error;
-
+  final TextEditingController _cityController = TextEditingController();
   @override
   void initState() {
     super.initState();
     _initLocation();
+  }
+  @override
+  void dispose() {
+    // 🧹 Limpamos o controller quando a página é destruída
+    _cityController.dispose();
+    super.dispose();
   }
 
   Future<void> _initLocation() async {
@@ -244,7 +251,7 @@ class _MainPageState extends State<MainPage> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-
+      //PERMISSION DENIED IF YOU CHOOSE NOT
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         setState(() {
@@ -276,6 +283,7 @@ class _MainPageState extends State<MainPage> {
         _lon = lon;
         _loading = false;
       });
+
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -301,11 +309,80 @@ class _MainPageState extends State<MainPage> {
       );
     }
 
-    if (_error != null) {
-      return Scaffold(body: Center(child: Text(_error!)));
+   // new changes, if lat ant lon not null, have a forecast page.
+    Widget forecastTab;
+    if(_lat != null && _lon != null){
+
+      forecastTab =ForecastPage(lat: _lat!, lon: _lon!);
+    }else {
+      //Window search for cities
+      forecastTab = Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text("No location founded."),
+              const SizedBox(height: 16),
+
+            // 1. Controller text
+              TextField(
+                controller: _cityController,
+                decoration: const InputDecoration(
+                  labelText: 'Enter the city',
+                  prefixIcon: Icon(Icons.location_city),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+            // 2. Manual button
+              ElevatedButton.icon(
+                onPressed: ()async {
+              // capture the text with this button
+                  setState(() {
+                    _loading = true;
+                    _error = null;
+                  });
+
+                  // 2.call the new class
+                  final cityService = Pickup_city();
+                  final coords = await cityService.getCoordinates(_cityController.text);
+
+                  // 3. update the widget
+                  setState(() {
+                    if (coords != null) {
+                      // Acessamos os valores do Record usando o ponto!
+                      _lat = coords.lat;
+                      _lon = coords.lon;
+                    } else {
+                      _error = "City no founded.";
+                    }
+                    _loading = false; // stop loading
+                  });
+                },
+                icon: const Icon(Icons.search),
+                label: const Text("Search city"),
+              ),
+              const SizedBox(height: 12),
+              // 3. button when we call again location
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _loading = true;
+                  });
+                  _initLocation();
+                },
+                icon: const Icon(Icons.my_location),
+                label: const Text("Try set location again."),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
-    final pages = [ForecastPage(lat: _lat!, lon: _lon!), const SatellitePage()];
+
+    final pages = [forecastTab, const SatellitePage()];
 
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: pages),
@@ -341,6 +418,37 @@ class _MainPageState extends State<MainPage> {
         ),
       ),
     );
+  }
+}
+class Pickup_city{
+  Future<({double lat, double lon})?> getCoordinates(String cityName) async {
+    if (cityName.trim().isEmpty) return null;
+
+    try {
+      final uri = Uri.parse(
+        'https://geocoding-api.open-meteo.com/v1/search?name=${Uri.encodeComponent(cityName)}&count=1&language=pt&format=json',
+      );
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['results'] != null && (data['results'] as List).isNotEmpty) {
+          final firstResult = data['results'][0];
+          double lat = (firstResult['latitude'] as num).toDouble();
+          double lon = (firstResult['longitude'] as num).toDouble();
+
+          lat = lat.clamp(-90.0, 90.0);
+          if (lon < 0) lon = lon + 360.0;
+          lon = lon.clamp(0.0, 360.0);
+
+          return(lat:lat,lon:lon);
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 }
 
