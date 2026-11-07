@@ -2,6 +2,8 @@ import 'package:astrotempo/forecast_page.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'satellite_page.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 final ThemeData astroDeepSpaceTheme = ThemeData.dark().copyWith(
   // =====================================================
@@ -201,7 +203,6 @@ class AstroApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
-      // darkTheme: ThemeData.dark(),
       darkTheme: astroDeepSpaceTheme,
       home: MainPage(),
     );
@@ -217,11 +218,11 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   int _currentIndex = 0;
-
   double? _lat;
   double? _lon;
   bool _loading = true;
-  String? _error;
+  final TextEditingController _cityController = TextEditingController();
+  List<LocationModel> _results = [];
 
   @override
   void initState() {
@@ -229,12 +230,17 @@ class _MainPageState extends State<MainPage> {
     _initLocation();
   }
 
+  @override
+  void dispose() {
+    _cityController.dispose();
+    super.dispose();
+  }
+
   Future<void> _initLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() {
-          _error = "Location services are disabled.";
           _loading = false;
         });
         return;
@@ -244,11 +250,9 @@ class _MainPageState extends State<MainPage> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         setState(() {
-          _error = "Location permission denied.";
           _loading = false;
         });
         return;
@@ -278,7 +282,6 @@ class _MainPageState extends State<MainPage> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
         _loading = false;
       });
     }
@@ -301,11 +304,93 @@ class _MainPageState extends State<MainPage> {
       );
     }
 
-    if (_error != null) {
-      return Scaffold(body: Center(child: Text(_error!)));
+    // if lat ant lon not null, go to forecast page.
+    // else ask user to manually enter location
+    Widget forecastTab;
+    if (_lat != null && _lon != null) {
+      forecastTab = ForecastPage(lat: _lat!, lon: _lon!);
+    } else {
+      forecastTab = Padding(
+        padding: EdgeInsetsGeometry.only(
+          left: 30,
+          right: 30,
+          top: 50,
+          bottom: 30,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. Live search TextField
+            TextField(
+              controller: _cityController,
+              decoration: const InputDecoration(
+                labelText: 'Enter city name',
+                hintText: "Type city name...",
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (text) async {
+                if (text.trim().isEmpty) {
+                  setState(() {
+                    _results = [];
+                  });
+                  return;
+                }
+
+                try {
+                  final results = await searchLocation(text);
+                  setState(() {
+                    _results = results;
+                  });
+                } catch (e) {
+                  setState(() {});
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // 2. Dynamic Results List
+            if (_results.isNotEmpty)
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: false,
+                  itemCount: _results.length,
+                  itemBuilder: (context, i) {
+                    final loc = _results[i];
+                    return ListTile(
+                      leading: const Icon(Icons.location_on_outlined),
+                      title: Text(
+                        loc.state != null
+                            ? "${loc.name}, ${loc.state}"
+                            : loc.name,
+                      ),
+                      subtitle: Text(loc.country),
+                      onTap: () {
+                        // Clear search results and text field when selected
+                        setState(() {
+                          _cityController.text = loc.state != null
+                              ? "${loc.name}, ${loc.state}"
+                              : loc.name;
+                          _results = []; // Hide list after selection
+                          _lat = loc.lat;
+                          _lon = loc.lon;
+
+                          if (_lon != null && _lon! < 0) {
+                            _lon = _lon! + 360.0;
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      );
     }
 
-    final pages = [ForecastPage(lat: _lat!, lon: _lon!), const SatellitePage()];
+    final pages = [forecastTab, const SatellitePage()];
 
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: pages),
@@ -344,49 +429,52 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-// class _MainPageState extends State<MainPage> {
-//   int _currentIndex = 0;
-//
-//   final List<Widget> _pages = const [
-//     ForecastPage(lat: -25.394, lon: 310.786),
-//     SatellitePage(),
-//   ];
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       body: IndexedStack(index: _currentIndex, children: _pages),
-//       bottomNavigationBar: Theme(
-//         data: Theme.of(context).copyWith(
-//           splashFactory: NoSplash.splashFactory,
-//           highlightColor: Colors.transparent,
-//           splashColor: Colors.transparent,
-//         ),
-//         child: NavigationBar(
-//           height: 60.0,
-//           labelPadding: EdgeInsets.zero,
-//           selectedIndex: _currentIndex,
-//           onDestinationSelected: (index) {
-//             setState(() {
-//               _currentIndex = index;
-//             });
-//           },
-//           indicatorColor: Colors.transparent,
-//           overlayColor: MaterialStateProperty.all(Colors.transparent),
-//           destinations: const [
-//             NavigationDestination(
-//               icon: Icon(Icons.wb_cloudy_outlined),
-//               selectedIcon: Icon(Icons.wb_cloudy),
-//               label: 'Forecast',
-//             ),
-//             NavigationDestination(
-//               icon: Icon(Icons.satellite_alt_outlined),
-//               selectedIcon: Icon(Icons.satellite_alt),
-//               label: 'Satellite',
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
+class LocationModel {
+  final String name;
+  final String? state;
+  final String country;
+  final double lat;
+  final double lon;
+
+  LocationModel({
+    required this.name,
+    this.state,
+    required this.country,
+    required this.lat,
+    required this.lon,
+  });
+
+  factory LocationModel.fromJson(Map<String, dynamic> json) {
+    return LocationModel(
+      name: json['name'] ?? '',
+      state: json['admin1'],
+      country: json['country'] ?? '',
+      lat: (json['latitude'] as num).toDouble(),
+      lon: (json['longitude'] as num).toDouble(),
+    );
+  }
+}
+
+Future<List<LocationModel>> searchLocation(String cityName) async {
+  if (cityName.trim().isEmpty) return [];
+
+  try {
+    final uri = Uri.parse(
+      'https://geocoding-api.open-meteo.com/v1/search?name=$cityName&count=10&language=en&format=json',
+    );
+    final response = await http.get(uri);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+
+      if (data['results'] != null && (data['results'] as List).isNotEmpty) {
+        return (data['results'] as List)
+            .map((item) => LocationModel.fromJson(item))
+            .toList();
+      }
+    }
+    return [];
+  } catch (e) {
+    return [];
+  }
+}
