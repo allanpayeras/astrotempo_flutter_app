@@ -375,7 +375,7 @@ class _SatellitePageState extends State<SatellitePage> {
 
     setState(() => isPlaying = true);
 
-    _animationTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+    _animationTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
       int next = (currentFrame + 1) % availableTimes.length;
       _setFrame(next);
     });

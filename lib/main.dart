@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'satellite_page.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+
 final ThemeData astroDeepSpaceTheme = ThemeData.dark().copyWith(
   // =====================================================
   // CORE COLORS
@@ -202,7 +203,6 @@ class AstroApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
-      // darkTheme: ThemeData.dark(),
       darkTheme: astroDeepSpaceTheme,
       home: MainPage(),
     );
@@ -218,20 +218,20 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   int _currentIndex = 0;
-
   double? _lat;
   double? _lon;
   bool _loading = true;
-  String? _error;
   final TextEditingController _cityController = TextEditingController();
+  List<LocationModel> _results = [];
+
   @override
   void initState() {
     super.initState();
     _initLocation();
   }
+
   @override
   void dispose() {
-    // 🧹 Limpamos o controller quando a página é destruída
     _cityController.dispose();
     super.dispose();
   }
@@ -241,7 +241,6 @@ class _MainPageState extends State<MainPage> {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() {
-          _error = "Location services are disabled.";
           _loading = false;
         });
         return;
@@ -251,11 +250,9 @@ class _MainPageState extends State<MainPage> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      //PERMISSION DENIED IF YOU CHOOSE NOT
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         setState(() {
-          _error = "Location permission denied.";
           _loading = false;
         });
         return;
@@ -283,10 +280,8 @@ class _MainPageState extends State<MainPage> {
         _lon = lon;
         _loading = false;
       });
-
     } catch (e) {
       setState(() {
-        _error = e.toString();
         _loading = false;
       });
     }
@@ -309,78 +304,91 @@ class _MainPageState extends State<MainPage> {
       );
     }
 
-   // new changes, if lat ant lon not null, have a forecast page.
+    // if lat ant lon not null, go to forecast page.
+    // else ask user to manually enter location
     Widget forecastTab;
-    if(_lat != null && _lon != null){
+    if (_lat != null && _lon != null) {
+      forecastTab = ForecastPage(lat: _lat!, lon: _lon!);
+    } else {
+      forecastTab = Padding(
+        padding: EdgeInsetsGeometry.only(
+          left: 30,
+          right: 30,
+          top: 50,
+          bottom: 30,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. Live search TextField
+            TextField(
+              controller: _cityController,
+              decoration: const InputDecoration(
+                labelText: 'Enter city name',
+                hintText: "Type city name...",
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (text) async {
+                if (text.trim().isEmpty) {
+                  setState(() {
+                    _results = [];
+                  });
+                  return;
+                }
 
-      forecastTab =ForecastPage(lat: _lat!, lon: _lon!);
-    }else {
-      //Window search for cities
-      forecastTab = Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text("No location founded."),
-              const SizedBox(height: 16),
+                try {
+                  final results = await searchLocation(text);
+                  setState(() {
+                    _results = results;
+                  });
+                } catch (e) {
+                  setState(() {});
+                }
+              },
+            ),
+            const SizedBox(height: 12),
 
-            // 1. Controller text
-              TextField(
-                controller: _cityController,
-                decoration: const InputDecoration(
-                  labelText: 'Enter the city',
-                  prefixIcon: Icon(Icons.location_city),
+            // 2. Dynamic Results List
+            if (_results.isNotEmpty)
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: false,
+                  itemCount: _results.length,
+                  itemBuilder: (context, i) {
+                    final loc = _results[i];
+                    return ListTile(
+                      leading: const Icon(Icons.location_on_outlined),
+                      title: Text(
+                        loc.state != null
+                            ? "${loc.name}, ${loc.state}"
+                            : loc.name,
+                      ),
+                      subtitle: Text(loc.country),
+                      onTap: () {
+                        // Clear search results and text field when selected
+                        setState(() {
+                          _cityController.text = loc.state != null
+                              ? "${loc.name}, ${loc.state}"
+                              : loc.name;
+                          _results = []; // Hide list after selection
+                          _lat = loc.lat;
+                          _lon = loc.lon;
+
+                          if (_lon != null && _lon! < 0) {
+                            _lon = _lon! + 360.0;
+                          }
+                        });
+                      },
+                    );
+                  },
                 ),
               ),
-              const SizedBox(height: 12),
-
-            // 2. Manual button
-              ElevatedButton.icon(
-                onPressed: ()async {
-              // capture the text with this button
-                  setState(() {
-                    _loading = true;
-                    _error = null;
-                  });
-
-                  // 2.call the new class
-                  final cityService = Pickup_city();
-                  final coords = await cityService.getCoordinates(_cityController.text);
-
-                  // 3. update the widget
-                  setState(() {
-                    if (coords != null) {
-                      // Acessamos os valores do Record usando o ponto!
-                      _lat = coords.lat;
-                      _lon = coords.lon;
-                    } else {
-                      _error = "City no founded.";
-                    }
-                    _loading = false; // stop loading
-                  });
-                },
-                icon: const Icon(Icons.search),
-                label: const Text("Search city"),
-              ),
-              const SizedBox(height: 12),
-              // 3. button when we call again location
-              TextButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _loading = true;
-                  });
-                  _initLocation();
-                },
-                icon: const Icon(Icons.my_location),
-                label: const Text("Try set location again."),
-              ),
-            ],
-          ),
+          ],
         ),
       );
     }
-
 
     final pages = [forecastTab, const SatellitePage()];
 
@@ -420,81 +428,53 @@ class _MainPageState extends State<MainPage> {
     );
   }
 }
-class Pickup_city{
-  Future<({double lat, double lon})?> getCoordinates(String cityName) async {
-    if (cityName.trim().isEmpty) return null;
 
-    try {
-      final uri = Uri.parse(
-        'https://geocoding-api.open-meteo.com/v1/search?name=${Uri.encodeComponent(cityName)}&count=1&language=pt&format=json',
-      );
-      final response = await http.get(uri);
+class LocationModel {
+  final String name;
+  final String? state;
+  final String country;
+  final double lat;
+  final double lon;
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+  LocationModel({
+    required this.name,
+    this.state,
+    required this.country,
+    required this.lat,
+    required this.lon,
+  });
 
-        if (data['results'] != null && (data['results'] as List).isNotEmpty) {
-          final firstResult = data['results'][0];
-          double lat = (firstResult['latitude'] as num).toDouble();
-          double lon = (firstResult['longitude'] as num).toDouble();
-
-          lat = lat.clamp(-90.0, 90.0);
-          if (lon < 0) lon = lon + 360.0;
-          lon = lon.clamp(0.0, 360.0);
-
-          return(lat:lat,lon:lon);
-        }
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
+  factory LocationModel.fromJson(Map<String, dynamic> json) {
+    return LocationModel(
+      name: json['name'] ?? '',
+      state: json['admin1'],
+      country: json['country'] ?? '',
+      lat: (json['latitude'] as num).toDouble(),
+      lon: (json['longitude'] as num).toDouble(),
+    );
   }
 }
 
-// class _MainPageState extends State<MainPage> {
-//   int _currentIndex = 0;
-//
-//   final List<Widget> _pages = const [
-//     ForecastPage(lat: -25.394, lon: 310.786),
-//     SatellitePage(),
-//   ];
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       body: IndexedStack(index: _currentIndex, children: _pages),
-//       bottomNavigationBar: Theme(
-//         data: Theme.of(context).copyWith(
-//           splashFactory: NoSplash.splashFactory,
-//           highlightColor: Colors.transparent,
-//           splashColor: Colors.transparent,
-//         ),
-//         child: NavigationBar(
-//           height: 60.0,
-//           labelPadding: EdgeInsets.zero,
-//           selectedIndex: _currentIndex,
-//           onDestinationSelected: (index) {
-//             setState(() {
-//               _currentIndex = index;
-//             });
-//           },
-//           indicatorColor: Colors.transparent,
-//           overlayColor: MaterialStateProperty.all(Colors.transparent),
-//           destinations: const [
-//             NavigationDestination(
-//               icon: Icon(Icons.wb_cloudy_outlined),
-//               selectedIcon: Icon(Icons.wb_cloudy),
-//               label: 'Forecast',
-//             ),
-//             NavigationDestination(
-//               icon: Icon(Icons.satellite_alt_outlined),
-//               selectedIcon: Icon(Icons.satellite_alt),
-//               label: 'Satellite',
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
+Future<List<LocationModel>> searchLocation(String cityName) async {
+  if (cityName.trim().isEmpty) return [];
+
+  try {
+    final uri = Uri.parse(
+      'https://geocoding-api.open-meteo.com/v1/search?name=$cityName&count=10&language=en&format=json',
+    );
+    final response = await http.get(uri);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+
+      if (data['results'] != null && (data['results'] as List).isNotEmpty) {
+        return (data['results'] as List)
+            .map((item) => LocationModel.fromJson(item))
+            .toList();
+      }
+    }
+    return [];
+  } catch (e) {
+    return [];
+  }
+}
